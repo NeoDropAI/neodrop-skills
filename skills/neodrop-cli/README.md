@@ -42,7 +42,7 @@ No browser is auto-launched, no local port is opened, no callback is needed — 
 | Area | What you can do | Commands |
 |---|---|---|
 | **Identity** | Who am I, and manage my access tokens | `me` · `whoami` · `tokens list` · `tokens revoke <id>` |
-| **Channels** | Browse, search, create and subscribe to channels | `channels list` · `get` · `search` · `create` · `subscribe` · `unsubscribe` · `categories` · `by-category` |
+| **Channels** | Browse, search, create (async) and subscribe to channels | `channels list` · `get` · `search` · `create` · `create-status` · `run` · `subscribe` · `unsubscribe` · `categories` · `by-category` |
 | **Posts** | Read and search content; view your subscribed feed | `posts list` · `get` · `search` · `feed` |
 | **Chat** | Message a Neodrop AI assistant and get the full reply | `chat "<message>" [--session <id> \| --channel <id>]` · `chat history` · `chat sessions` |
 | **Raw procedure** | Call any tRPC procedure with no sugar command | `api <procedure> [--json '…' \| --stdin] [--mutation]` |

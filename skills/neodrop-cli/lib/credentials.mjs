@@ -1,14 +1,16 @@
-// 本地凭证（~/.neodrop/credentials.json，chmod 0600）。
+// Local credentials (~/.neodrop/credentials.json, chmod 0600).
 //
-// 只支持单一 active token——切换 server / 换号都走 logout → login。
+// Only a single active token is supported — switching server / account goes
+// through logout → login.
 //
-// 凭证 schema：
-//   webOrigin  string  产品域（neodrop.ai；本地 dev 4001）
-//   apiOrigin  string  API 域（api.neodrop.ai；本地 dev 3001）—— 与 web 拆开是因为部署不同域
-//   token      string  PAT 明文，仅本机；权限 0600
-//   tokenId    string  用于 logout / 远程撤销
-//   name       string  在 /settings/cli-tokens 上展示的客户端名
-//   expiresAt  string  ISO 8601，默认 90 天
+// Credential schema:
+//   webOrigin  string  product origin (neodrop.ai; local dev 4001)
+//   apiOrigin  string  API origin (api.neodrop.ai; local dev 3001) — split from
+//                      web because they deploy on different domains
+//   token      string  PAT in plaintext, local machine only; mode 0600
+//   tokenId    string  used for logout / remote revocation
+//   name       string  client name shown on /settings/cli-tokens
+//   expiresAt  string  ISO 8601, defaults to 90 days
 //   createdAt  string  ISO 8601
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
@@ -27,12 +29,14 @@ export function readCredentials() {
   try {
     return JSON.parse(readFileSync(FILE_PATH, "utf-8"));
   } catch (err) {
-    throw new Error(`无法解析 ${FILE_PATH}：${err.message}`);
+    throw new Error(`Failed to parse ${FILE_PATH}: ${err.message}`);
   }
 }
 
-// 原子写：写临时文件 → chmod 0600 → rename。chmod 在 rename 之前完成，确保最终
-// 文件出现的瞬间权限就是 0600，不存在其他进程能读到 world-readable 的窗口。
+// Atomic write: write temp file → chmod 0600 → rename. The chmod completes
+// before the rename, guaranteeing the final file has 0600 permissions the moment
+// it appears — there is no window where another process could read it as
+// world-readable.
 export function writeCredentials(creds) {
   mkdirSync(FILE_DIR, { recursive: true });
   const tmp = `${FILE_PATH}.tmp`;
@@ -52,7 +56,7 @@ export function clearCredentials() {
 export function requireCredentials() {
   const creds = readCredentials();
   if (creds === null) {
-    throw new Error("未登录。先运行：npx neodrop-cli login");
+    throw new Error("Not logged in. Run: npx neodrop-cli login");
   }
   return creds;
 }

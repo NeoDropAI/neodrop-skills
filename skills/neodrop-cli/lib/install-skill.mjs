@@ -1,12 +1,15 @@
-// 把 SKILL.md + references/ 拷进 agent 的 skill 目录，让 `npx neodrop-cli` 一条命令
-// 既装好 CLI 又装好 skill 描述。
+// Copy SKILL.md + references/ into the agent's skill directory so that a single
+// `npx neodrop-cli` command installs both the CLI and the skill description.
 //
-// npm/npx 只分发「可执行文件」；而 Claude Code 等 agent 的 skill 是 SKILL.md +
-// references/ 这组文件落进 agent 的 skill 目录后才会被路由。两条分发渠道本来是
-// 分开的，这个命令把它们合并成一步。
+// npm/npx only distributes "executables"; an agent skill for Claude Code and the
+// like is the SKILL.md + references/ file set, which is only routed once it lands
+// in the agent's skill directory. The two distribution channels are normally
+// separate, and this command merges them into one step.
 //
-// 默认目标 ~/.claude/skills/neodrop-cli/（Claude Code 约定）；--dest 可改到别的
-// agent 的 skill 目录。目录名固定 neodrop-cli，与 SKILL.md frontmatter 的 name 一致。
+// The default target is ~/.claude/skills/neodrop-cli/ (the Claude Code
+// convention); --dest can point at another agent's skill directory. The
+// directory name is fixed to neodrop-cli, matching the name in SKILL.md's
+// frontmatter.
 
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
@@ -18,14 +21,14 @@ export function defaultSkillDest() {
 }
 
 export function installSkill({ dest } = {}) {
-  // 包根目录 = 本文件所在 lib/ 的上一层（bin/ 与 lib/ 与 SKILL.md 同级）
+  // Package root = the parent of this file's lib/ dir (bin/, lib/, and SKILL.md are siblings)
   const here = dirname(fileURLToPath(import.meta.url)); // .../lib
   const pkgRoot = dirname(here);
   const target = dest || defaultSkillDest();
 
   const skillSrc = join(pkgRoot, "SKILL.md");
   if (!existsSync(skillSrc)) {
-    throw new Error(`找不到 SKILL.md（期望在 ${skillSrc}）；npm 包可能未按 files 白名单打进 SKILL.md`);
+    throw new Error(`SKILL.md not found (expected at ${skillSrc}); the npm package may not have included SKILL.md in its files allowlist`);
   }
 
   mkdirSync(target, { recursive: true });

@@ -27,12 +27,38 @@
 | `neodrop channels by-category <category> --sort latest --limit 20` | Channels in a category. |
 | `neodrop channels search "<query>" --locale en --limit 10` | Full-text search over the public pool. |
 
-**Create & subscribe**
+**Create (async — runs the creation agent)**
+
+`channels create` starts the **same creation-agent pipeline as the web wizard**: it immediately creates the channel in `DRAFT`, then an agent researches the topic, generates the runnable configuration (requirement / sources / schedule) and activates the channel. This usually takes **a few minutes** and consumes credits.
 
 | Command | What it does |
 |---|---|
-| `neodrop channels create --name "<name>" --description "<desc>" --locale en` | Create a channel from flags. |
-| `neodrop channels create --json '{"name":"X","locale":"en","type":"PRIVATE"}'` | Create a channel from a full JSON payload. |
+| `neodrop channels create --name "<name>" --prompt "<brief>" --locale en` | Start creation; returns the `agentTask` right away (`task.id` + `task.channelId`). |
+| `neodrop channels create --name "<name>" --prompt "<brief>" --wait` | Block until the task reaches a terminal status (polls every 15s, 20min cap). |
+| `neodrop channels create-status <taskId>` | Poll an in-flight creation task. |
+
+| Flag | Purpose |
+|---|---|
+| `--name` (required) | Channel name shown to users. |
+| `--prompt` | Free-form creation instructions for the agent — topic, audience, style, cadence. Strongly recommended; without it the agent only has the name to go on. |
+| `--description` | One-line channel intro (shown on the channel page; not the agent instructions). |
+| `--carrier Article\|ImagePost\|Podcast\|Music\|Video` | Content modality; omit to let the platform default (Article). |
+| `--json '{...}' \| --stdin` | Advanced — raw `agentTask.create` input (`channelName` / `channelDescription` / `description` (= prompt) / `locale` / `contentCarrier`). |
+
+- Task `status`: `PENDING` / `RUNNING` → in progress; `COMPLETED` → done; `FAILED` → failed (exit 1 with `--wait`); `PAUSED` → out of credits, auto-resumes after topping up.
+- New channels default to **PUBLIC** visibility; flip it later on the web manage page.
+- A bare `channel.create` (shell only, stays `DRAFT` forever, no runnable config) is intentionally **not** a sugar command; if you really need it: `api channel.create --json '{"name":"X"}' --mutation`.
+
+**Run (produce one issue now)**
+
+| Command | What it does |
+|---|---|
+| `neodrop channels run <channelId>` | `channel.triggerRun` — manual production run. Requires a runnable config (creation finished; a `DRAFT` with config is auto-activated). Fails with a clear error while creation is still in progress. |
+
+**Subscribe**
+
+| Command | What it does |
+|---|---|
 | `neodrop channels subscribe <channelId>` | Subscribe to a channel. |
 | `neodrop channels unsubscribe <channelId>` | Unsubscribe from a channel. |
 
@@ -89,6 +115,7 @@ For tRPC procedures with no sugar command, fall back to `api`:
 
 - **Defaults to a GET query** — every write MUST add `--mutation` explicitly.
 - To find a procedure's full name, check the main repo's `packages/backend/src/api/trpc/routers.ts`, or probe `curl /api/trpc/<router>.<procedure>?input=...` against a dev backend.
+- **Field contracts are strict where it matters**: `channel.update` accepts exactly `{id, name?, description?, avatar?}` and `channel.create` exactly `{name, description?, type?, locale?}` — unknown keys are rejected with `BAD_REQUEST` (they are **not** a way to write channel configuration; the runnable config is owned by the creation agent, see [channels → Create](#channels)). Other procedures may still silently strip unknown keys (standard zod behavior), so don't infer "accepted" from a success response — verify the response body.
 
 ## Global flags
 

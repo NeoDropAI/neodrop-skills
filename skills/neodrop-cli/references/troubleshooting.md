@@ -25,7 +25,9 @@ When the CLI errors, **first read the error code in brackets on stderr**, then m
 | Symptom | Meaning | Fix |
 |---|---|---|
 | `[NOT_FOUND]` | id / slug doesn't exist | List with `channels list` / `posts list` first to verify the id |
-| `[BAD_REQUEST]` | Input schema is wrong (most common with `--json`) | Read the stderr detail; cross-check `neodrop <cmd> --help`; for complex input, get it working with a sugar command first, then drop to `--json` |
+| `[BAD_REQUEST]` | Input schema is wrong (most common with `--json`), including unknown keys on `channel.create` / `channel.update` — those two reject unrecognized fields instead of stripping them | Read the stderr detail; cross-check `neodrop <cmd> --help` and the field contracts in [commands.md#api](commands.md#api); for complex input, get it working with a sugar command first, then drop to `--json` |
+| `[FORBIDDEN]` mentioning credits on `channels create` | Channel creation costs credits and the account balance is insufficient | Ask the user to top up / check in on the web app, then retry |
+| Error saying the channel is still a draft with no runnable config on `channels run` | The channel is a bare `DRAFT` shell — creation never ran or is still in progress | If a creation task exists: poll `channels create-status <taskId>` until `COMPLETED`, then rerun. If the channel was created as a bare shell (old CLI ≤1.x or raw `api channel.create`): create it properly with `channels create --name ... --prompt ...` — a shell can't be activated in place |
 | `[INTERNAL_SERVER_ERROR]` | The backend crashed | Retry once; if it persists, open an issue with the full stderr |
 
 ## Environment

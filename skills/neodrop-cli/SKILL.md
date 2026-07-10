@@ -1,6 +1,6 @@
 ---
 name: neodrop-cli
-version: 1.2.0
+version: 2.0.0
 tested_with:
   neodrop_api: "2026-07"
   node: ">=18"
@@ -59,7 +59,7 @@ Full flow + security model + reusing credentials across machines: [`references/a
 | Scenario | Command | Details |
 |---|---|---|
 | Current user / token | `me` / `whoami` / `tokens list` | [`references/commands.md#identity`](references/commands.md#identity) |
-| View / search / create / subscribe channels | `channels list/get/search/create/subscribe/unsubscribe`, `channels categories`, `channels by-category` | [`references/commands.md#channels`](references/commands.md#channels) |
+| View / search / create / subscribe channels | `channels list/get/search/create/create-status/run/subscribe/unsubscribe`, `channels categories`, `channels by-category` | [`references/commands.md#channels`](references/commands.md#channels) |
 | View / search post content | `posts list/get/search`, `feed` | [`references/commands.md#posts`](references/commands.md#posts) |
 | Chat with the AI assistant (send a message, wait for the full reply) | `chat "<message>" [--session <id> \| --channel <id>]`, `chat history`, `chat sessions` | [`references/commands.md#chat`](references/commands.md#chat) |
 | A procedure with no sugar command | `api <procedure> [--json '…' \| --stdin] [--mutation]` | [`references/commands.md#api`](references/commands.md#api) |
@@ -68,6 +68,7 @@ Full flow + security model + reusing credentials across machines: [`references/a
 
 ## Hard rules for the AI
 
+- **Channel creation is async and costs credits**: `channels create` starts the creation agent (same pipeline as the web wizard) and usually takes a few minutes. Tell the user creation has started, then poll `channels create-status <taskId>` (or use `--wait`). Don't report "channel created" until the task status is `COMPLETED`.
 - **De-dupe before creating a channel**: run `channels list --mine` to check you don't already own one on the topic, then `channels search` against the public pool for a same-name channel — avoid duplicates.
 - **`channels get <id>` before subscribing** to check locale / private / topic — don't subscribe blindly.
 - **Never hand-craft links from memory** — `posts get` / `channels get` / `me` already print `🔗 <canonical-url>` to stderr; use that line.

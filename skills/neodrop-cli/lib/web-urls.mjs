@@ -1,17 +1,23 @@
-// Neodrop 前端 URL 拼装：用户拿到 id 后能直接得到一条可点击的网页链接。
+// Neodrop frontend URL assembly: once a user has an id, they get a clickable web
+// link directly.
 //
-// 为什么放 skill 而不是后端 response：URL 路径（`/post/<id>` / `/channel/<id>` /
-// `/user/<id>`）是前端的渲染契约，不是数据契约——`grain.id` 是稳定的数据；前端
-// 明天可以把路由改成 `/post/<id>` 而无需后端发新版 API。把路由塞进 response 会让
-// backend 反向依赖前端渲染。这里给 CLI 内部用，作为 stderr 上的人类可读提示。
+// Why this lives in the skill rather than the backend response: URL paths
+// (`/post/<id>` / `/channel/<id>` / `/user/<id>`) are a frontend rendering
+// contract, not a data contract — `grain.id` is stable data; the frontend could
+// change the route to `/post/<id>` tomorrow without the backend shipping a new
+// API version. Baking routes into the response would make the backend depend
+// backwards on frontend rendering. This is for CLI internal use, as a
+// human-readable hint on stderr.
 //
-// 路径权威源 = `apps/web/src/app/[locale]/<route>/[id]/page.tsx`：
+// Path source of truth = `apps/web/src/app/[locale]/<route>/[id]/page.tsx`:
 //   post / grain  → `/post/<id>`
 //   channel       → `/channel/<id>`
 //   user          → `/user/<id>`
 //
-// 注意：CLI 不挂 locale 前缀（neodrop.ai 的 localePrefix='as-needed'，默认 locale
-// `en` 落到无前缀路径；其它 locale 由前端按用户偏好做客户端 redirect）。
+// Note: the CLI attaches no locale prefix (neodrop.ai uses
+// localePrefix='as-needed', so the default locale `en` maps to the prefix-less
+// path; other locales are handled by a client-side redirect based on user
+// preference).
 
 function strip(origin) {
   return origin.replace(/\/+$/, "");

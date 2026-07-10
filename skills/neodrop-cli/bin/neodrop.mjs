@@ -1,15 +1,15 @@
 #!/usr/bin/env node
-// neodrop CLI 入口。AI agent 与人类共用——直接打 Neodrop tRPC HTTP 接口
-// （Bearer PAT 鉴权），不走 MCP。
+// neodrop CLI entry point. Shared by AI agents and humans — talks to the Neodrop
+// tRPC HTTP API directly (Bearer PAT auth), not over MCP.
 //
-// 调用：
+// Invocation:
 //   npx neodrop-cli <command> [args...]
-//   或全局安装后：neodrop <command> [args...]
+//   or, when installed globally: neodrop <command> [args...]
 //
-// 输出：
-//   stdout = JSON（AI 直接 JSON.parse）；--pretty 切缩进 JSON 给人看
-//   stderr = 日志 / 进度 / 错误描述
-// 退出码：0 成功 / 1 业务错误 / 2 参数错误
+// Output:
+//   stdout = JSON (parse it directly); --pretty switches to indented JSON for humans
+//   stderr = logs / progress / error descriptions
+// Exit codes: 0 success / 1 business error / 2 usage error
 
 import { hostname } from "node:os";
 import { parseArgs } from "node:util";
@@ -30,14 +30,14 @@ import { channelUrl, postUrl, userUrl } from "../lib/web-urls.mjs";
 const DEFAULT_SERVER = process.env.NEODROP_SERVER || "https://neodrop.ai";
 const ENV_API_OVERRIDE = process.env.NEODROP_API;
 
-// 用法错误 → 退出码 2（区别于业务错误 1）。
+// Usage error → exit code 2 (distinct from business error 1).
 class UsageError extends Error {}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// 客户端标识——授权页和 settings/cli-tokens 上显示给用户辨认。
+// Client identifier — shown on the consent page and settings/cli-tokens so the user can recognize it.
 function detectClientName() {
   const host = hostname() || "host";
   const term = process.env.TERM_PROGRAM || "";
@@ -59,13 +59,13 @@ async function readStdin() {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
-// `--json '<input>'` / `--stdin` 二选一（互斥，调用前已校验），都没给则返回 undefined。
+// One of `--json '<input>'` / `--stdin` (mutually exclusive, checked by the caller); returns undefined if neither is given.
 async function loadInput(values) {
   if (values.json) {
     try {
       return JSON.parse(values.json);
     } catch (err) {
-      throw new UsageError(`--json 解析失败：${err.message}`);
+      throw new UsageError(`--json failed to parse: ${err.message}`);
     }
   }
   if (values.stdin) {
@@ -74,7 +74,7 @@ async function loadInput(values) {
   return undefined;
 }
 
-// parseArgs 包装：未知 flag / 缺值统一转成 UsageError（退出码 2）。
+// parseArgs wrapper: unknown flags / missing values become a UsageError (exit code 2).
 function parse(argv, options) {
   try {
     return parseArgs({ args: argv, options, allowPositionals: true, strict: true });
@@ -86,7 +86,7 @@ function parse(argv, options) {
 function toLimit(value) {
   if (value === undefined) return undefined;
   const n = Number(value);
-  if (!Number.isFinite(n)) throw new UsageError(`--limit 必须是数字，收到「${value}」`);
+  if (!Number.isFinite(n)) throw new UsageError(`--limit must be a number, got "${value}"`);
   return n;
 }
 
@@ -96,14 +96,14 @@ function requirePositional(positionals, index, hint) {
   return value;
 }
 
-// ---- 元命令 -----------------------------------------------------------
+// ---- meta commands ----------------------------------------------------
 
-// 统一登录：session polling 模式。
-//   1. startSession 拿到 sessionId + pollSecret + verification URL
-//      （pollSecret 只在本进程内持有，是 poll 领 token 的唯一凭据，不进 URL）
-//   2. 打印 URL 给用户复制到浏览器（不自动拉起，不开本地 server，无 callback）
-//   3. 带 pollSecret 轮询 pollSession 直到 APPROVED / DENIED / EXPIRED
-//   4. 拿到 token 写入 ~/.neodrop/credentials.json
+// Unified login: session-polling flow.
+//   1. startSession returns sessionId + pollSecret + verification URL
+//      (pollSecret is held only in this process — the sole credential for polling the token, never in the URL)
+//   2. print the URL for the user to open in a browser (nothing is auto-launched, no local server, no callback)
+//   3. poll pollSession with the pollSecret until APPROVED / DENIED / EXPIRED
+//   4. on success, write the token to ~/.neodrop/credentials.json
 async function cmdLogin(argv) {
   const { values } = parse(argv, {
     server: { type: "string" },
@@ -112,39 +112,41 @@ async function cmdLogin(argv) {
   });
 
   const webOrigin = (values.server || DEFAULT_SERVER).replace(/\/+$/, "");
-  // --api 显式 > NEODROP_API env > 启发式推断
+  // explicit --api > NEODROP_API env > heuristic inference
   const apiOrigin = values.api || ENV_API_OVERRIDE || inferApiOrigin(webOrigin);
   const clientName = values.name || detectClientName();
 
   note(`web   = ${webOrigin}`);
   note(`api   = ${apiOrigin}`);
 
-  // 1. 起 session
+  // 1. start a session
   const session = await trpcMutation({ apiOrigin, token: null }, "cliToken.startSession", {
     clientName,
     webOrigin,
   });
   const sessionId = session.sessionId;
-  // pollSecret 是后端只下发给本 CLI 进程的私有领取凭据，不进 verification URL；
-  // poll 时必须回传它才能领到 token。URL 里只有 sessionId，截图/转发泄漏也领不走 token。
+  // pollSecret is a private claim credential the backend hands only to this CLI process; it is never in the
+  // verification URL. You must send it back when polling to claim the token. The URL carries only the sessionId,
+  // so a leaked screenshot / forward cannot claim the token.
   const pollSecret = session.pollSecret;
   const verificationUrl = session.verificationUrl;
   const pollInterval = Math.max(1, Number(session.pollIntervalSeconds || 2));
 
   note("");
-  note("👉 在任意浏览器（手机 / 笔记本 / 同机都行）打开下面 URL 完成授权：");
+  note("👉 Open the URL below in any browser (phone / laptop / this machine) to authorize:");
   note("");
-  // URL 顶格单独成行（不加缩进）：这条 URL 含 ?session= 256bit 串、必然超 80 列，
-  // 终端会折行。顶格单独一行最便于「三击选整行 / 鼠标拖整行」一次性把完整 URL 复制走。
+  // The URL is printed flush-left on its own line (no indent): it contains a 256-bit ?session= string, always
+  // exceeds 80 columns and the terminal wraps it. Flush-left on its own line makes it easiest to triple-click /
+  // drag-select the whole line and copy the full URL in one go.
   note(verificationUrl);
   note("");
-  note("   （URL 较长会折行，复制时连同结尾的 ?session=... 一起选全）");
-  note(`   客户端名「${clientName}」（在授权页确认是本次启动的 CLI）`);
-  note("   授权链接 10 分钟内有效。授权后回到这个终端继续——CLI 会自动检测。");
+  note("   (Long URLs wrap — when copying, select all the way through the trailing ?session=...)");
+  note(`   Client name "${clientName}" (confirm it on the consent page — it's this CLI launch)`);
+  note("   The link is valid for 10 minutes. After approving, return to this terminal — the CLI detects it automatically.");
   note("");
 
-  // 2. 轮询
-  const deadline = Date.now() + 10 * 60 * 1000; // 与后端 session 寿命对齐
+  // 2. poll
+  const deadline = Date.now() + 10 * 60 * 1000; // aligned with the backend session lifetime
   let waitedDots = 0;
   let token = null;
   let tokenId = null;
@@ -158,40 +160,40 @@ async function cmdLogin(argv) {
         pollSecret,
       });
     } catch (err) {
-      // NOT_FOUND 一般是 session 已被后端清理；其它错误也直接抛
-      throw new Error(`轮询授权失败：${err.message}`);
+      // NOT_FOUND usually means the backend already cleaned up the session; rethrow any other error too
+      throw new Error(`Failed to poll for authorization: ${err.message}`);
     }
 
     const status = res.status;
     if (status === "APPROVED") {
       if (res.alreadyClaimed) {
         throw new Error(
-          "授权 token 已被领走（极少触发，正常应是本 CLI 自己领）。请重新 `npx neodrop-cli login`。",
+          "The authorization token was already claimed (rare — normally this CLI claims it itself). Please run `npx neodrop-cli login` again.",
         );
       }
       token = res.token;
       tokenId = res.tokenId;
       const ea = res.tokenExpiresAt;
       expiresAt = typeof ea === "string" ? ea : ea ? String(ea) : null;
-      if (!token) throw new Error("授权返回 APPROVED 但缺 token；请重新 `npx neodrop-cli login`");
+      if (!token) throw new Error("Authorization returned APPROVED but no token; please run `npx neodrop-cli login` again");
       break;
     }
     if (status === "DENIED") {
-      throw new Error("授权被用户拒绝。如有需要请重新 `npx neodrop-cli login` 并核对客户端名。");
+      throw new Error("Authorization was denied by the user. If needed, run `npx neodrop-cli login` again and check the client name.");
     }
     if (status === "EXPIRED") {
-      throw new Error("授权链接已过期（10 分钟内未授权）。请重新 `npx neodrop-cli login`。");
+      throw new Error("The authorization link expired (not approved within 10 minutes). Please run `npx neodrop-cli login` again.");
     }
-    // 还在 PENDING — 打点进度（每 5 次 poll 一个点，不刷屏）
+    // still PENDING — print a progress dot (one dot every 5 polls, to avoid spamming)
     waitedDots += 1;
     if (waitedDots % 5 === 0) note(".", "");
   }
 
-  if (!token) throw new Error("等待授权超时。请重新 `npx neodrop-cli login`。");
+  if (!token) throw new Error("Timed out waiting for authorization. Please run `npx neodrop-cli login` again.");
 
   note("");
 
-  // 3. 写凭证
+  // 3. write the credential
   writeCredentials({
     webOrigin,
     apiOrigin,
@@ -202,9 +204,9 @@ async function cmdLogin(argv) {
     createdAt: new Date().toISOString(),
   });
 
-  // 4. 校验 + 输出
+  // 4. verify + output
   const me = await trpcQuery({ apiOrigin, token }, "user.getMe");
-  note(`✅ 登录成功：${me.email || me.id || "<unknown>"}`);
+  note(`✅ Logged in: ${me.email || me.id || "<unknown>"}`);
   note(`   credentials = ${credentialsPath()}`);
   emit({
     ok: true,
@@ -220,7 +222,7 @@ async function cmdLogin(argv) {
 async function cmdLogout() {
   const creds = readCredentials();
   if (creds === null) {
-    note("未登录，无需登出。");
+    note("Not logged in — nothing to log out of.");
     emit({ ok: true, alreadyLoggedOut: true });
     return;
   }
@@ -230,9 +232,9 @@ async function cmdLogout() {
       id: creds.tokenId,
     });
     revoked = true;
-    note(`✅ 已撤销 ${creds.tokenId}`);
+    note(`✅ Revoked ${creds.tokenId}`);
   } catch (err) {
-    note(`⚠ 撤销失败（继续清本地凭证）：${err.message}`);
+    note(`⚠ Revocation failed (clearing local credential anyway): ${err.message}`);
   }
   clearCredentials();
   emit({ ok: true, revoked });
@@ -267,24 +269,24 @@ async function cmdTokensList() {
 
 async function cmdTokensRevoke(argv) {
   const { positionals } = parse(argv, {});
-  const id = requirePositional(positionals, 0, "用法：neodrop tokens revoke <id>");
+  const id = requirePositional(positionals, 0, "Usage: neodrop tokens revoke <id>");
   const { apiOrigin, token, creds } = authedCtx();
   const r = await trpcMutation({ apiOrigin, token }, "cliToken.revoke", { id });
   if (id === creds.tokenId) {
     clearCredentials();
-    note("（撤销的是本机当前 token，已清除本地凭证。需要重新 neodrop login。）");
+    note("(That was this machine's current token — the local credential has been cleared. You'll need to run neodrop login again.)");
   }
   emit(r);
 }
 
-// ---- 频道命令 ---------------------------------------------------------
+// ---- channel commands -------------------------------------------------
 
 async function cmdChannelsList(argv) {
   const { values } = parse(argv, {
     mine: { type: "boolean" },
     limit: { type: "string" },
     cursor: { type: "string" },
-    locale: { type: "string", default: "en" }, // 缺省 en，与 Web 默认 locale 一致
+    locale: { type: "string", default: "en" }, // default en, matching the web default locale
   });
   const { apiOrigin, token } = authedCtx();
   if (values.mine) {
@@ -298,55 +300,106 @@ async function cmdChannelsList(argv) {
 
 async function cmdChannelsGet(argv) {
   const { positionals } = parse(argv, {});
-  const id = requirePositional(positionals, 0, "用法：neodrop channels get <channelId>");
+  const id = requirePositional(positionals, 0, "Usage: neodrop channels get <channelId>");
   const { apiOrigin, token, creds } = authedCtx();
   emit(await trpcQuery({ apiOrigin, token }, "channel.getById", { id }));
   note(`🔗 ${channelUrl(creds.webOrigin, id)}`);
 }
 
+// Creating a channel = launching a creation Agent task (agentTask.create), the same pipeline as the web
+// create wizard. A bare channel.create only leaves an empty shell stuck forever in DRAFT with no runnable
+// config (issue #7), so the sugar command no longer exposes it; if you truly need a shell, use
+// `api channel.create --mutation`.
+const CREATE_CARRIERS = ["Article", "ImagePost", "Podcast", "Music", "Video"];
+
 async function cmdChannelsCreate(argv) {
   const { values } = parse(argv, {
     name: { type: "string" },
+    prompt: { type: "string" },
     description: { type: "string" },
-    type: { type: "string" },
     locale: { type: "string" },
+    carrier: { type: "string" },
+    wait: { type: "boolean" },
     json: { type: "string" },
     stdin: { type: "boolean" },
   });
   if (values.json && values.stdin) {
-    throw new UsageError("--json 与 --stdin 互斥，只能给一个");
+    throw new UsageError("--json and --stdin are mutually exclusive, pass only one");
   }
-  if (values.type && values.type !== "PUBLIC" && values.type !== "PRIVATE") {
-    throw new UsageError("--type 只能是 PUBLIC 或 PRIVATE");
+  if (values.carrier && !CREATE_CARRIERS.includes(values.carrier)) {
+    throw new UsageError(`--carrier must be one of ${CREATE_CARRIERS.join(" | ")}`);
   }
-  const { apiOrigin, token } = authedCtx();
+  const ctx = authedCtx();
+  // --json / --stdin passes the raw agentTask.create input through (advanced use; field contract in references/commands.md)
   let input = await loadInput(values);
   if (input === undefined) {
     if (!values.name) {
       throw new UsageError(
-        "用法：neodrop channels create --name <X> [--description <Y>] [--type PUBLIC|PRIVATE] [--locale zh-cn]\n" +
-          "或：neodrop channels create --json '{\"name\":\"X\",\"locale\":\"zh-cn\"}'\n" +
-          "或：neodrop channels create --stdin",
+        'Usage: neodrop channels create --name <channel name> [--prompt "<creation brief>"] [--description <one-line summary>] [--locale en] [--carrier Article|ImagePost|Podcast|Music|Video] [--wait]\n' +
+          "Creation is asynchronous (an Agent generates the channel config, usually a few minutes): by default it returns the task immediately — poll with channels create-status <taskId>; --wait blocks until creation finishes.",
       );
     }
-    input = { name: values.name };
-    if (values.description) input.description = values.description;
-    if (values.type) input.type = values.type;
+    input = { channelName: values.name };
+    if (values.description) input.channelDescription = values.description;
+    if (values.prompt) input.description = values.prompt;
     if (values.locale) input.locale = values.locale;
+    if (values.carrier) input.contentCarrier = values.carrier;
   }
-  emit(await trpcMutation({ apiOrigin, token }, "channel.create", input));
+  const task = await trpcMutation(ctx, "agentTask.create", input);
+  note(`✅ Creation task started: task=${task.id} channel=${task.channelId ?? "<pending>"}`);
+  if (task.channelId) note(`🔗 ${channelUrl(ctx.creds.webOrigin, task.channelId)}`);
+
+  if (!values.wait) {
+    note("   The channel config is generated asynchronously by an Agent (usually a few minutes). Poll: neodrop channels create-status " + task.id);
+    emit(task);
+    return;
+  }
+
+  // --wait: poll to a terminal state (COMPLETED / FAILED), or stop at PAUSED (credits exhausted, awaiting top-up).
+  const deadline = Date.now() + 20 * 60 * 1000;
+  let current = task;
+  while (Date.now() < deadline) {
+    if (current.status === "COMPLETED" || current.status === "FAILED") break;
+    if (current.status === "PAUSED") {
+      note("⚠ Task paused (usually insufficient credits). It resumes automatically after a top-up; check later with channels create-status.");
+      break;
+    }
+    await sleep(15 * 1000);
+    current = await trpcQuery(ctx, "agentTask.getById", { id: task.id });
+    note(`… status=${current.status}`);
+  }
+  if (current.status === "FAILED") process.exitCode = 1;
+  emit(current);
+}
+
+// Query a creation task's status (agentTask.getById). status: PENDING/RUNNING → in progress;
+// COMPLETED → done; FAILED → failed; PAUSED → paused (insufficient credits, resumes after top-up).
+async function cmdChannelsCreateStatus(argv) {
+  const { positionals } = parse(argv, {});
+  const id = requirePositional(positionals, 0, "Usage: neodrop channels create-status <taskId>");
+  const { apiOrigin, token } = authedCtx();
+  emit(await trpcQuery({ apiOrigin, token }, "agentTask.getById", { id }));
+}
+
+// Manually trigger a channel to produce one run of content (channel.triggerRun). The channel must have
+// finished creation (or be DRAFT but already have a runnable config — the backend activates it automatically).
+async function cmdChannelsRun(argv) {
+  const { positionals } = parse(argv, {});
+  const id = requirePositional(positionals, 0, "Usage: neodrop channels run <channelId>");
+  const { apiOrigin, token } = authedCtx();
+  emit(await trpcMutation({ apiOrigin, token }, "channel.triggerRun", { channelId: id }));
 }
 
 async function cmdChannelsSubscribe(argv) {
   const { positionals } = parse(argv, {});
-  const id = requirePositional(positionals, 0, "用法：neodrop channels subscribe <channelId>");
+  const id = requirePositional(positionals, 0, "Usage: neodrop channels subscribe <channelId>");
   const { apiOrigin, token } = authedCtx();
   emit(await trpcMutation({ apiOrigin, token }, "channel.subscribe", { channelId: id }));
 }
 
 async function cmdChannelsUnsubscribe(argv) {
   const { positionals } = parse(argv, {});
-  const id = requirePositional(positionals, 0, "用法：neodrop channels unsubscribe <channelId>");
+  const id = requirePositional(positionals, 0, "Usage: neodrop channels unsubscribe <channelId>");
   const { apiOrigin, token } = authedCtx();
   emit(await trpcMutation({ apiOrigin, token }, "channel.unsubscribe", { channelId: id }));
 }
@@ -357,7 +410,7 @@ async function cmdChannelsSearch(argv) {
     locale: { type: "string" },
     strict: { type: "boolean" },
   });
-  const query = requirePositional(positionals, 0, '用法：neodrop channels search "<query>"');
+  const query = requirePositional(positionals, 0, 'Usage: neodrop channels search "<query>"');
   const { apiOrigin, token } = authedCtx();
   const payload = { query };
   const limit = toLimit(values.limit);
@@ -379,9 +432,9 @@ async function cmdChannelsByCategory(argv) {
     locale: { type: "string" },
     sort: { type: "string" },
   });
-  const slug = requirePositional(positionals, 0, "用法：neodrop channels by-category <slug>");
+  const slug = requirePositional(positionals, 0, "Usage: neodrop channels by-category <slug>");
   if (values.sort && values.sort !== "latest" && values.sort !== "popular") {
-    throw new UsageError("--sort 只能是 latest 或 popular");
+    throw new UsageError("--sort must be latest or popular");
   }
   const { apiOrigin, token } = authedCtx();
   const payload = { categorySlug: slug };
@@ -393,8 +446,8 @@ async function cmdChannelsByCategory(argv) {
   emit(await trpcQuery({ apiOrigin, token }, "channel.listByCategory", payload));
 }
 
-// ---- post 命令 --------------------------------------------------------
-// 命令面向用户的术语统一为 post；tRPC procedure 名仍是后端契约 `grain.*`，不动。
+// ---- post commands ----------------------------------------------------
+// The user-facing term is unified as post; the tRPC procedure names are still the backend contract `grain.*`, unchanged.
 
 async function cmdPostsList(argv) {
   const { values } = parse(argv, {
@@ -419,7 +472,7 @@ async function cmdPostsList(argv) {
     emit(await trpcQuery({ apiOrigin, token }, "grain.list", payload));
     return;
   }
-  // 否则 listRecent（公开 feed）
+  // otherwise listRecent (public feed)
   const payload = { limit };
   if (values.cursor) payload.cursor = values.cursor;
   if (values.locale) payload.locale = values.locale;
@@ -428,7 +481,7 @@ async function cmdPostsList(argv) {
 
 async function cmdPostsGet(argv) {
   const { positionals } = parse(argv, {});
-  const id = requirePositional(positionals, 0, "用法：neodrop posts get <postId>");
+  const id = requirePositional(positionals, 0, "Usage: neodrop posts get <postId>");
   const { apiOrigin, token, creds } = authedCtx();
   emit(await trpcQuery({ apiOrigin, token }, "grain.getById", { id }));
   note(`🔗 ${postUrl(creds.webOrigin, id)}`);
@@ -440,7 +493,7 @@ async function cmdPostsSearch(argv) {
     locale: { type: "string" },
     strict: { type: "boolean" },
   });
-  const query = requirePositional(positionals, 0, '用法：neodrop posts search "<query>"');
+  const query = requirePositional(positionals, 0, 'Usage: neodrop posts search "<query>"');
   const { apiOrigin, token } = authedCtx();
   const payload = { query };
   const limit = toLimit(values.limit);
@@ -461,7 +514,7 @@ async function cmdFeed(argv) {
   emit(await trpcQuery({ apiOrigin, token }, "grain.listSubscribed", payload));
 }
 
-// ---- chat 命令 --------------------------------------------------------
+// ---- chat commands ----------------------------------------------------
 
 async function cmdChatSend(argv) {
   const { values, positionals } = parse(argv, {
@@ -474,26 +527,26 @@ async function cmdChatSend(argv) {
   const text = requirePositional(
     positionals,
     0,
-    '用法：neodrop chat "<message>" [--session <id> | --channel <id>] [--locale en] [--timeout 秒]\n' +
-      "     neodrop chat history --session <id>",
+    'Usage: neodrop chat "<message>" [--session <id> | --channel <id>] [--locale en] [--timeout <seconds>]\n' +
+      "       neodrop chat history --session <id>",
   );
   if (values.session && values.channel) {
-    throw new UsageError("--session 与 --channel 互斥：--session 继续既有会话，--channel 拿该频道的助手会话");
+    throw new UsageError("--session and --channel are mutually exclusive: --session continues an existing session, --channel gets that channel's assistant session");
   }
   const timeoutSec = values.timeout === undefined ? 600 : Number(values.timeout);
   if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) {
-    throw new UsageError(`--timeout 必须是正数秒，收到「${values.timeout}」`);
+    throw new UsageError(`--timeout must be a positive number of seconds, got "${values.timeout}"`);
   }
   const pollSec = values["poll-interval"] === undefined ? 2 : Number(values["poll-interval"]);
   if (!Number.isFinite(pollSec) || pollSec <= 0) {
-    throw new UsageError(`--poll-interval 必须是正数秒，收到「${values["poll-interval"]}」`);
+    throw new UsageError(`--poll-interval must be a positive number of seconds, got "${values["poll-interval"]}"`);
   }
 
   const { apiOrigin, token } = authedCtx();
   let sessionId = values.session;
   if (!sessionId) {
     sessionId = await resolveChatSession({ apiOrigin, token, channelId: values.channel });
-    note(`会话 ${sessionId}（继续对话：neodrop chat "…" --session ${sessionId}）`);
+    note(`session ${sessionId} (continue with: neodrop chat "…" --session ${sessionId})`);
   }
 
   const result = await sendAndAwaitReply({
@@ -506,7 +559,7 @@ async function cmdChatSend(argv) {
     pollIntervalMs: pollSec * 1000,
   });
   if (!result.reply) {
-    note("⚠ 本轮没有 assistant 文本回复（可能生成失败或被取消），newMessages 里是本轮全部新增消息。");
+    note("⚠ No assistant text reply this turn (generation may have failed or been cancelled); newMessages holds every message added this turn.");
   }
   emit(result);
 }
@@ -516,7 +569,7 @@ async function cmdChatHistory(argv) {
     session: { type: "string" },
   });
   if (!values.session) {
-    throw new UsageError("用法：neodrop chat history --session <id>");
+    throw new UsageError("Usage: neodrop chat history --session <id>");
   }
   const { apiOrigin, token } = authedCtx();
   emit(
@@ -538,7 +591,7 @@ async function cmdChat(argv) {
   return cmdChatSend(argv);
 }
 
-// ---- 兜底通道 ---------------------------------------------------------
+// ---- escape hatch -----------------------------------------------------
 
 async function cmdApi(argv) {
   const { values, positionals } = parse(argv, {
@@ -547,9 +600,9 @@ async function cmdApi(argv) {
     mutation: { type: "boolean" },
   });
   if (values.json && values.stdin) {
-    throw new UsageError("--json 与 --stdin 互斥，只能给一个");
+    throw new UsageError("--json and --stdin are mutually exclusive, pass only one");
   }
-  const procedure = requirePositional(positionals, 0, "用法：neodrop api <procedure> [--json '...' | --stdin] [--mutation]");
+  const procedure = requirePositional(positionals, 0, "Usage: neodrop api <procedure> [--json '...' | --stdin] [--mutation]");
   const { apiOrigin, token } = authedCtx();
   const input = await loadInput(values);
   if (values.mutation) {
@@ -559,71 +612,75 @@ async function cmdApi(argv) {
   }
 }
 
-// ---- skill 安装 -------------------------------------------------------
+// ---- skill install ----------------------------------------------------
 
 async function cmdInstallSkill(argv) {
   const { values } = parse(argv, {
     dest: { type: "string" },
   });
   const { target, copied } = installSkill({ dest: values.dest });
-  note(`✅ 已安装 skill 到 ${target}`);
-  note(`   拷入：${copied.join("、")}`);
-  note("   重启 Claude Code（或新开会话）后，AI 看到 Neodrop 相关提问会自动调本 skill。");
+  note(`✅ Installed skill to ${target}`);
+  note(`   Copied: ${copied.join(", ")}`);
+  note("   After restarting Claude Code (or opening a new session), the AI will route Neodrop-related questions to this skill automatically.");
   emit({ ok: true, target, copied });
 }
 
-// ---- 帮助 -------------------------------------------------------------
+// ---- help -------------------------------------------------------------
 
-const HELP = `neodrop — Neodrop CLI（AI agent 与人类共用，stdout = JSON）
+const HELP = `neodrop — Neodrop CLI (shared by AI agents and humans, stdout = JSON)
 
-用法：
+Usage:
   npx neodrop-cli <command> [args...]
 
-元命令：
-  login [--server <url>] [--api <url>] [--name <名>]   授权登录，写 PAT 到 ~/.neodrop/credentials.json
-  logout                                               撤销 PAT + 删本地凭证
-  whoami                                               当前 token + user 信息
-  me                                                   当前用户信息（user.getMe）
-  tokens list                                          列出所有 PAT
-  tokens revoke <id>                                   撤销指定 PAT
-  install-skill [--dest <dir>]                         把 SKILL.md + references 装进 agent skill 目录
-                                                       （默认 ${defaultSkillDest()}）
+Meta:
+  login [--server <url>] [--api <url>] [--name <name>]  Authorize and write a PAT to ~/.neodrop/credentials.json
+  logout                                               Revoke the PAT + delete the local credential
+  whoami                                               Current token + user info
+  me                                                   Current user info (user.getMe)
+  tokens list                                          List every PAT
+  tokens revoke <id>                                   Revoke a specific PAT
+  install-skill [--dest <dir>]                         Install SKILL.md + references into the agent's skill dir
+                                                       (default ${defaultSkillDest()})
 
-频道：
+Channels:
   channels list [--mine] [--limit N] [--cursor C] [--locale L]
   channels get <channelId>
-  channels create --name <X> [--description <Y>] [--type PUBLIC|PRIVATE] [--locale L]
-  channels create --json '{...}' | --stdin
+  channels create --name <X> [--prompt "<brief>"] [--description <Y>] [--locale L]
+                  [--carrier Article|ImagePost|Podcast|Music|Video] [--wait]
+                                                       Launch the creation Agent (async, a few minutes)
+  channels create-status <taskId>                      Check a creation task's progress / result
+  channels run <channelId>                             Manually trigger one run of content
   channels subscribe <channelId>
   channels unsubscribe <channelId>
   channels search "<query>" [--limit N] [--locale L] [--strict]
   channels categories
   channels by-category <slug> [--limit N] [--cursor C] [--locale L] [--sort latest|popular]
 
-内容（Post）：
+Content (Post):
   posts list [--subscribed | --channel <id>] [--limit N] [--cursor C] [--locale L]
   posts get <postId>
   posts search "<query>" [--limit N] [--locale L] [--strict]
   feed [--limit N] [--cursor C]                        = posts list --subscribed
 
-对话（chat）：
-  chat "<message>" [--session <id> | --channel <id>] [--locale L] [--timeout 秒]
-                                                       发消息给 AI 助手并等完整回复（默认新建全局
-                                                       助手会话；--session 继续对话；--channel 和
-                                                       该频道的助手聊）
-  chat history --session <id>                          查看会话全部消息
-  chat sessions                                        列出我的会话
+Chat:
+  chat "<message>" [--session <id> | --channel <id>] [--locale L] [--timeout <seconds>]
+                                                       Send a message to the AI assistant and wait for the full
+                                                       reply (defaults to a new global-assistant session;
+                                                       --session continues a session; --channel talks to that
+                                                       channel's assistant)
+  chat history --session <id>                          View a session's full message list
+  chat sessions                                        List my sessions
 
-兜底：
+Escape hatch:
   api <procedure> [--json '...' | --stdin] [--mutation]
 
-全局：
-  --pretty                                             缩进 JSON 输出（仍是合法 JSON）
+Global:
+  --pretty                                             Indented JSON output (still valid JSON)
 
-环境变量：NEODROP_SERVER（web origin）/ NEODROP_API（api origin）
-更多见 SKILL.md 与 references/。`;
+Environment variables: NEODROP_SERVER (web origin) / NEODROP_API (api origin)
+See SKILL.md and references/ for more.`;
 
-// ---- 路由 -------------------------------------------------------------
+// ---- routing ----------------------------------------------------------
 
 const TOKENS_SUB = {
   list: cmdTokensList,
@@ -633,6 +690,8 @@ const CHANNELS_SUB = {
   list: cmdChannelsList,
   get: cmdChannelsGet,
   create: cmdChannelsCreate,
+  "create-status": cmdChannelsCreateStatus,
+  run: cmdChannelsRun,
   subscribe: cmdChannelsSubscribe,
   unsubscribe: cmdChannelsUnsubscribe,
   search: cmdChannelsSearch,
@@ -648,17 +707,17 @@ const POSTS_SUB = {
 async function dispatchGroup(name, table, argv) {
   const sub = argv[0];
   if (!sub || sub === "--help" || sub === "-h") {
-    throw new UsageError(`用法：neodrop ${name} <${Object.keys(table).join(" | ")}>`);
+    throw new UsageError(`Usage: neodrop ${name} <${Object.keys(table).join(" | ")}>`);
   }
   const handler = table[sub];
   if (!handler) {
-    throw new UsageError(`未知子命令 ${name} ${sub}（可用：${Object.keys(table).join(" / ")}）`);
+    throw new UsageError(`Unknown subcommand ${name} ${sub} (available: ${Object.keys(table).join(" / ")})`);
   }
   await handler(argv.slice(1));
 }
 
 async function dispatch(rawArgs) {
-  // 全局 --pretty 可放任意位置：先剥出来，剩下的交给各命令解析。
+  // The global --pretty can appear anywhere: strip it out first, hand the rest to each command's parser.
   const pretty = rawArgs.includes("--pretty");
   setPretty(pretty);
   const args = rawArgs.filter((a) => a !== "--pretty");
@@ -683,7 +742,7 @@ async function dispatch(rawArgs) {
       return dispatchGroup("tokens", TOKENS_SUB, rest);
     case "channels":
       return dispatchGroup("channels", CHANNELS_SUB, rest);
-    case "grains": // 向后兼容：旧命令名，已更名为 posts
+    case "grains": // backward compatible: old command name, renamed to posts
     case "posts":
       return dispatchGroup("posts", POSTS_SUB, rest);
     case "feed":
@@ -695,7 +754,7 @@ async function dispatch(rawArgs) {
     case "install-skill":
       return cmdInstallSkill(rest);
     default:
-      throw new UsageError(`未知命令「${cmd}」。运行 neodrop --help 看全部命令。`);
+      throw new UsageError(`Unknown command "${cmd}". Run neodrop --help to see every command.`);
   }
 }
 
@@ -708,7 +767,7 @@ async function main() {
       process.exitCode = 2;
       return;
     }
-    // ApiError（tRPC 业务错）与其它运行时错误统一退出码 1
+    // ApiError (tRPC business error) and other runtime errors share exit code 1
     note(`✗ ${err.message}`);
     process.exitCode = 1;
   }

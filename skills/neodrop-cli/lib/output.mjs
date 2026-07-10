@@ -1,7 +1,7 @@
-// 统一输出：stdout = JSON（AI 直接 JSON.parse），stderr = 日志/提示。
+// Unified output: stdout = JSON (an AI can JSON.parse directly), stderr = logs/notices.
 //
-// 默认单行 JSON；--pretty 切 2 空格缩进 JSON——两者都是合法 JSON，AI 不需要
-// flag 切换也能解析。
+// Single-line JSON by default; --pretty switches to 2-space indented JSON — both
+// are valid JSON, so an AI can parse either without needing the flag.
 
 let pretty = false;
 
