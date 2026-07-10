@@ -39,14 +39,23 @@ No browser is auto-launched, no local port is opened, no callback is needed — 
 
 ## Commands
 
-| Area | Commands |
-|---|---|
-| Identity | `me` · `whoami` · `tokens list` |
-| Channels | `channels list` · `get` · `search` · `create` · `subscribe` · `unsubscribe` · `categories` · `by-category` |
-| Posts | `posts list` · `get` · `search` · `feed` |
-| Raw procedure | `api <procedure> [--json '…' \| --stdin] [--mutation]` |
+| Area | What you can do | Commands |
+|---|---|---|
+| **Identity** | Who am I, and manage my access tokens | `me` · `whoami` · `tokens list` · `tokens revoke <id>` |
+| **Channels** | Browse, search, create and subscribe to channels | `channels list` · `get` · `search` · `create` · `subscribe` · `unsubscribe` · `categories` · `by-category` |
+| **Posts** | Read and search content; view your subscribed feed | `posts list` · `get` · `search` · `feed` |
+| **Chat** | Message a Neodrop AI assistant and get the full reply | `chat "<message>" [--session <id> \| --channel <id>]` · `chat history` · `chat sessions` |
+| **Raw procedure** | Call any tRPC procedure with no sugar command | `api <procedure> [--json '…' \| --stdin] [--mutation]` |
 
-Full command reference: [`references/commands.md`](https://github.com/NeoDropAI/neodrop-skills/blob/main/skills/neodrop-cli/references/commands.md).
+Every command takes `--help` for its arguments and `--pretty` for indented JSON. Full reference with per-command tables: [`references/commands.md`](https://github.com/NeoDropAI/neodrop-skills/blob/main/skills/neodrop-cli/references/commands.md).
+
+### Chat, in one line
+
+```bash
+npx neodrop-cli chat "What's new in my subscriptions this week?"
+```
+
+Sends the message, blocks until the assistant's reply is fully generated (server-side, so it survives disconnects), and prints `{sessionId, reply, newMessages}` as JSON. Reuse the printed `sessionId` with `--session` to continue the conversation, or add `--channel <id>` to talk to a specific channel's assistant.
 
 ## Use as an AI-agent skill
 

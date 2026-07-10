@@ -1,7 +1,7 @@
 {
   "name": "neodrop-cli",
-  "version": "1.1.0",
-  "description": "Neodrop (neodrop.ai) CLI — let your AI agent (Claude Code / Cursor / Codex) browse channels, read posts, manage subscriptions and create channels as you. stdout is always valid JSON. npx neodrop-cli login and go.",
+  "version": "1.2.0",
+  "description": "Neodrop (neodrop.ai) CLI — let your AI agent (Claude Code / Cursor / Codex) browse channels, read posts, manage subscriptions, create channels and chat with Neodrop's AI assistants as you. stdout is always valid JSON. npx neodrop-cli login and go.",
   "type": "module",
   "bin": {
     "neodrop": "bin/neodrop.mjs"

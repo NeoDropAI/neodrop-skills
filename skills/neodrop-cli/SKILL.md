@@ -1,10 +1,10 @@
 ---
 name: neodrop-cli
-version: 1.1.0
+version: 1.2.0
 tested_with:
-  neodrop_api: "2026-06"
+  neodrop_api: "2026-07"
   node: ">=18"
-description: Operate the Neodrop platform (neodrop.ai) as the current user — create channels, subscribe / unsubscribe, search public channels and content, browse categories, list your own channels, and read post details. Trigger this skill whenever the user mentions Neodrop or neodrop.ai, "my channels" / "what am I subscribed to", "post" / "posts" (Neodrop's content units — also called "grain" / "grains", the legacy name), "create a channel" / "subscribe to this channel" / "search channels", public content / public feed / subscribed feed — or the same intent in any language. Always call `npx neodrop-cli <command>`; do NOT use fetch / curl / hand-rolled HTTP — this skill already handles auth, JSON serialization, error codes and locale defaults.
+description: Operate the Neodrop platform (neodrop.ai) as the current user — create channels, subscribe / unsubscribe, search public channels and content, browse categories, list your own channels, read post details, and chat with Neodrop's AI assistants (global or per-channel, sending a message and receiving the full reply). Trigger this skill whenever the user mentions Neodrop or neodrop.ai, "my channels" / "what am I subscribed to", "post" / "posts" (Neodrop's content units — also called "grain" / "grains", the legacy name), "create a channel" / "subscribe to this channel" / "search channels", "ask Neodrop's assistant" / "chat with my channel", public content / public feed / subscribed feed — or the same intent in any language. Always call `npx neodrop-cli <command>`; do NOT use fetch / curl / hand-rolled HTTP — this skill already handles auth, JSON serialization, error codes and locale defaults.
 ---
 
 # neodrop-cli skill
@@ -61,6 +61,7 @@ Full flow + security model + reusing credentials across machines: [`references/a
 | Current user / token | `me` / `whoami` / `tokens list` | [`references/commands.md#identity`](references/commands.md#identity) |
 | View / search / create / subscribe channels | `channels list/get/search/create/subscribe/unsubscribe`, `channels categories`, `channels by-category` | [`references/commands.md#channels`](references/commands.md#channels) |
 | View / search post content | `posts list/get/search`, `feed` | [`references/commands.md#posts`](references/commands.md#posts) |
+| Chat with the AI assistant (send a message, wait for the full reply) | `chat "<message>" [--session <id> \| --channel <id>]`, `chat history`, `chat sessions` | [`references/commands.md#chat`](references/commands.md#chat) |
 | A procedure with no sugar command | `api <procedure> [--json '…' \| --stdin] [--mutation]` | [`references/commands.md#api`](references/commands.md#api) |
 | User pasted a Neodrop URL and wants details | Map URL → id, call the matching `get` command | [`references/url-routing.md`](references/url-routing.md) |
 | Failure / error | Read the error code on stderr | [`references/troubleshooting.md`](references/troubleshooting.md) |

@@ -14,6 +14,7 @@
 import { hostname } from "node:os";
 import { parseArgs } from "node:util";
 import { ApiError, trpcMutation, trpcQuery } from "../lib/api.mjs";
+import { resolveChatSession, sendAndAwaitReply } from "../lib/chat.mjs";
 import {
   clearCredentials,
   credentialsPath,
@@ -460,6 +461,83 @@ async function cmdFeed(argv) {
   emit(await trpcQuery({ apiOrigin, token }, "grain.listSubscribed", payload));
 }
 
+// ---- chat 命令 --------------------------------------------------------
+
+async function cmdChatSend(argv) {
+  const { values, positionals } = parse(argv, {
+    session: { type: "string" },
+    channel: { type: "string" },
+    locale: { type: "string", default: "en" },
+    timeout: { type: "string" },
+    "poll-interval": { type: "string" },
+  });
+  const text = requirePositional(
+    positionals,
+    0,
+    '用法：neodrop chat "<message>" [--session <id> | --channel <id>] [--locale en] [--timeout 秒]\n' +
+      "     neodrop chat history --session <id>",
+  );
+  if (values.session && values.channel) {
+    throw new UsageError("--session 与 --channel 互斥：--session 继续既有会话，--channel 拿该频道的助手会话");
+  }
+  const timeoutSec = values.timeout === undefined ? 600 : Number(values.timeout);
+  if (!Number.isFinite(timeoutSec) || timeoutSec <= 0) {
+    throw new UsageError(`--timeout 必须是正数秒，收到「${values.timeout}」`);
+  }
+  const pollSec = values["poll-interval"] === undefined ? 2 : Number(values["poll-interval"]);
+  if (!Number.isFinite(pollSec) || pollSec <= 0) {
+    throw new UsageError(`--poll-interval 必须是正数秒，收到「${values["poll-interval"]}」`);
+  }
+
+  const { apiOrigin, token } = authedCtx();
+  let sessionId = values.session;
+  if (!sessionId) {
+    sessionId = await resolveChatSession({ apiOrigin, token, channelId: values.channel });
+    note(`会话 ${sessionId}（继续对话：neodrop chat "…" --session ${sessionId}）`);
+  }
+
+  const result = await sendAndAwaitReply({
+    apiOrigin,
+    token,
+    sessionId,
+    text,
+    locale: values.locale,
+    timeoutMs: timeoutSec * 1000,
+    pollIntervalMs: pollSec * 1000,
+  });
+  if (!result.reply) {
+    note("⚠ 本轮没有 assistant 文本回复（可能生成失败或被取消），newMessages 里是本轮全部新增消息。");
+  }
+  emit(result);
+}
+
+async function cmdChatHistory(argv) {
+  const { values } = parse(argv, {
+    session: { type: "string" },
+  });
+  if (!values.session) {
+    throw new UsageError("用法：neodrop chat history --session <id>");
+  }
+  const { apiOrigin, token } = authedCtx();
+  emit(
+    await trpcQuery({ apiOrigin, token }, "session.getMessages", {
+      sessionId: values.session,
+    }),
+  );
+}
+
+async function cmdChatSessions() {
+  const { apiOrigin, token } = authedCtx();
+  emit(await trpcQuery({ apiOrigin, token }, "session.list"));
+}
+
+async function cmdChat(argv) {
+  const sub = argv[0];
+  if (sub === "history") return cmdChatHistory(argv.slice(1));
+  if (sub === "sessions") return cmdChatSessions();
+  return cmdChatSend(argv);
+}
+
 // ---- 兜底通道 ---------------------------------------------------------
 
 async function cmdApi(argv) {
@@ -527,6 +605,14 @@ const HELP = `neodrop — Neodrop CLI（AI agent 与人类共用，stdout = JSON
   posts get <postId>
   posts search "<query>" [--limit N] [--locale L] [--strict]
   feed [--limit N] [--cursor C]                        = posts list --subscribed
+
+对话（chat）：
+  chat "<message>" [--session <id> | --channel <id>] [--locale L] [--timeout 秒]
+                                                       发消息给 AI 助手并等完整回复（默认新建全局
+                                                       助手会话；--session 继续对话；--channel 和
+                                                       该频道的助手聊）
+  chat history --session <id>                          查看会话全部消息
+  chat sessions                                        列出我的会话
 
 兜底：
   api <procedure> [--json '...' | --stdin] [--mutation]
@@ -602,6 +688,8 @@ async function dispatch(rawArgs) {
       return dispatchGroup("posts", POSTS_SUB, rest);
     case "feed":
       return cmdFeed(rest);
+    case "chat":
+      return cmdChat(rest);
     case "api":
       return cmdApi(rest);
     case "install-skill":
