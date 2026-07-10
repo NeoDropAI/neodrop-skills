@@ -1,0 +1,51 @@
+<svg width="1100" height="300" viewBox="0 0 1100 300" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="How neodrop-cli login works">
+  <rect x="0" y="0" width="1100" height="300" rx="20" fill="#f7f4ee"/>
+  <text x="40" y="52" font-family="Georgia, serif" font-size="26" fill="#1d1d1d">How <tspan font-family="ui-monospace, Menlo, monospace" font-size="22" fill="#8a6d2f">neodrop-cli login</tspan> works</text>
+  <text x="40" y="80" font-family="-apple-system, 'Segoe UI', Arial, sans-serif" font-size="16" fill="#5a5a5a">No auto-launched browser · no local callback port · works over SSH, cloud sandboxes and containers.</text>
+
+  <!-- boxes -->
+  <g font-family="-apple-system, 'Segoe UI', Arial, sans-serif">
+    <!-- 1 -->
+    <rect x="30" y="120" width="185" height="120" rx="14" fill="#ffffff" stroke="#d8d0c2" stroke-width="1.5"/>
+    <circle cx="58" cy="150" r="14" fill="#1d1d1d"/><text x="58" y="155" text-anchor="middle" font-size="15" fill="#fff">1</text>
+    <text x="48" y="190" font-size="15" fill="#1d1d1d" font-weight="600">Run the CLI</text>
+    <text x="48" y="213" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#5a5a5a">npx neodrop-cli</text>
+    <text x="48" y="230" font-family="ui-monospace, Menlo, monospace" font-size="13" fill="#5a5a5a">login</text>
+
+    <!-- 2 -->
+    <rect x="247" y="120" width="185" height="120" rx="14" fill="#ffffff" stroke="#d8d0c2" stroke-width="1.5"/>
+    <circle cx="275" cy="150" r="14" fill="#1d1d1d"/><text x="275" y="155" text-anchor="middle" font-size="15" fill="#fff">2</text>
+    <text x="265" y="190" font-size="15" fill="#1d1d1d" font-weight="600">Prints a URL</text>
+    <text x="265" y="213" font-size="13" fill="#5a5a5a">to stderr — copy</text>
+    <text x="265" y="230" font-size="13" fill="#5a5a5a">it anywhere</text>
+
+    <!-- 3 (highlight) -->
+    <rect x="464" y="120" width="185" height="120" rx="14" fill="#fdf6e9" stroke="#e2b878" stroke-width="2"/>
+    <circle cx="492" cy="150" r="14" fill="#8a6d2f"/><text x="492" y="155" text-anchor="middle" font-size="15" fill="#fff">3</text>
+    <text x="482" y="190" font-size="15" fill="#1d1d1d" font-weight="600">You approve</text>
+    <text x="482" y="213" font-size="13" fill="#5a5a5a">open in any browser,</text>
+    <text x="482" y="230" font-size="13" fill="#5a5a5a">confirm the client</text>
+
+    <!-- 4 -->
+    <rect x="681" y="120" width="185" height="120" rx="14" fill="#ffffff" stroke="#d8d0c2" stroke-width="1.5"/>
+    <circle cx="709" cy="150" r="14" fill="#1d1d1d"/><text x="709" y="155" text-anchor="middle" font-size="15" fill="#fff">4</text>
+    <text x="699" y="190" font-size="15" fill="#1d1d1d" font-weight="600">CLI polls</text>
+    <text x="699" y="213" font-size="13" fill="#5a5a5a">detects approval,</text>
+    <text x="699" y="230" font-size="13" fill="#5a5a5a">receives the PAT</text>
+
+    <!-- 5 -->
+    <rect x="898" y="120" width="185" height="120" rx="14" fill="#ffffff" stroke="#d8d0c2" stroke-width="1.5"/>
+    <circle cx="926" cy="150" r="14" fill="#2e7d32"/><text x="926" y="155" text-anchor="middle" font-size="15" fill="#fff">✓</text>
+    <text x="916" y="190" font-size="15" fill="#1d1d1d" font-weight="600">Saved locally</text>
+    <text x="916" y="213" font-family="ui-monospace, Menlo, monospace" font-size="12" fill="#5a5a5a">~/.neodrop</text>
+    <text x="916" y="230" font-size="13" fill="#5a5a5a">chmod 0600</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#b8ae9c" stroke-width="2" fill="#b8ae9c">
+    <line x1="219" y1="180" x2="243" y2="180"/><path d="M243 180 l-8 -4 v8 z"/>
+    <line x1="436" y1="180" x2="460" y2="180"/><path d="M460 180 l-8 -4 v8 z"/>
+    <line x1="653" y1="180" x2="677" y2="180"/><path d="M677 180 l-8 -4 v8 z"/>
+    <line x1="870" y1="180" x2="894" y2="180"/><path d="M894 180 l-8 -4 v8 z"/>
+  </g>
+</svg>

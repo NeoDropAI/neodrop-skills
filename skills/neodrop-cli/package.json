@@ -1,0 +1,36 @@
+{
+  "name": "neodrop-cli",
+  "version": "1.1.0",
+  "description": "Neodrop (neodrop.ai) CLI — let your AI agent (Claude Code / Cursor / Codex) browse channels, read posts, manage subscriptions and create channels as you. stdout is always valid JSON. npx neodrop-cli login and go.",
+  "type": "module",
+  "bin": {
+    "neodrop": "bin/neodrop.mjs"
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "SKILL.md",
+    "references/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "neodrop",
+    "cli",
+    "ai-agent",
+    "claude-code",
+    "skill",
+    "trpc"
+  ],
+  "homepage": "https://github.com/NeoDropAI/neodrop-skills/tree/main/skills/neodrop-cli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NeoDropAI/neodrop-skills.git",
+    "directory": "skills/neodrop-cli"
+  },
+  "bugs": {
+    "url": "https://github.com/NeoDropAI/neodrop-skills/issues"
+  },
+  "license": "MIT"
+}

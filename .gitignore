@@ -1,0 +1,13 @@
+# Node
+node_modules/
+*.tgz
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 本地凭证不入 repo（同时 ~/.neodrop/ 也是用户私有目录，跟仓库无关，但兜底加上）
+credentials.json
