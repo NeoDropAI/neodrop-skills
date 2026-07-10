@@ -14,7 +14,7 @@
 import { hostname } from "node:os";
 import { parseArgs } from "node:util";
 import { ApiError, trpcMutation, trpcQuery } from "../lib/api.mjs";
-import { resolveChatSession, sendAndAwaitReply } from "../lib/chat.mjs";
+import { resolveChatSession, sendAndAwaitReply, slimMessage } from "../lib/chat.mjs";
 import {
   clearCredentials,
   credentialsPath,
@@ -572,11 +572,10 @@ async function cmdChatHistory(argv) {
     throw new UsageError("Usage: neodrop chat history --session <id>");
   }
   const { apiOrigin, token } = authedCtx();
-  emit(
-    await trpcQuery({ apiOrigin, token }, "session.getMessages", {
-      sessionId: values.session,
-    }),
-  );
+  const messages = await trpcQuery({ apiOrigin, token }, "session.getMessages", {
+    sessionId: values.session,
+  });
+  emit(messages.map(slimMessage));
 }
 
 async function cmdChatSessions() {

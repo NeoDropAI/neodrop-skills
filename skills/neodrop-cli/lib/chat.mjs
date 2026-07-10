@@ -106,6 +106,43 @@ function extractText(parts) {
     .join("");
 }
 
+// Noise the raw message payload carries but a CLI consumer never needs: multi-KB
+// provider signatures, provider metadata, and per-call execution plumbing.
+const NOISE_KEYS = new Set([
+  "providerMetadata",
+  "callProviderMetadata",
+  "resultProviderMetadata",
+  "signature",
+  "startedAt",
+  "finishedAt",
+  "durationMs",
+  "stepNumber",
+  "toolCallId",
+]);
+
+function stripNoise(value) {
+  if (Array.isArray(value)) return value.map(stripNoise);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (NOISE_KEYS.has(k)) continue;
+      out[k] = stripNoise(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+// Slim a message for output: drop chain-of-thought `reasoning` parts (internal
+// thinking, not the answer) and strip the noise keys above from what remains.
+export function slimMessage(m) {
+  const cleaned = stripNoise(m);
+  if (Array.isArray(cleaned.parts)) {
+    cleaned.parts = cleaned.parts.filter((p) => p && p.type !== "reasoning");
+  }
+  return cleaned;
+}
+
 /**
  * Send one message and wait for the complete reply.
  *
@@ -163,17 +200,16 @@ export async function sendAndAwaitReply({
   // as tool / data cards).
   const fresh = messages.filter((m) => !beforeIds.has(m.id));
   const lastUserIdx = fresh.map((m) => m.role).lastIndexOf("user");
-  const newMessages = lastUserIdx >= 0 ? fresh.slice(lastUserIdx + 1) : fresh;
-  const lastAssistant = [...newMessages]
-    .reverse()
-    .find((m) => m.role === "assistant");
+  const turn = lastUserIdx >= 0 ? fresh.slice(lastUserIdx + 1) : fresh;
+  const lastAssistant = [...turn].reverse().find((m) => m.role === "assistant");
 
   return {
     sessionId,
-    reply: lastAssistant
-      ? { text: extractText(lastAssistant.parts), parts: lastAssistant.parts }
-      : null,
-    newMessages,
+    // reply.text is the assistant's final text — empty when it only asked a
+    // clarifying question via a tool (read newMessages then). The structured
+    // content lives in newMessages, so reply carries just the text (no dup).
+    reply: lastAssistant ? { text: extractText(lastAssistant.parts) } : null,
+    newMessages: turn.map(slimMessage),
   };
 }
 
