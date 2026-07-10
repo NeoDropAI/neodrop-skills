@@ -1,6 +1,6 @@
 ---
 name: neodrop-cli
-version: 2.0.0
+version: 2.0.1
 tested_with:
   neodrop_api: "2026-07"
   node: ">=18"
